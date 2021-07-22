@@ -9,6 +9,15 @@ resources:
     ref: master
 pr:
   - master
+
+variables:
+  BuildPlatform: 'AnyCpu'
+  BuildConfiguration: 'Release'
+  RootDir: '$(Build.SourcesDirectory)'
+  ProductBinPath: '$(rootDir)\bin\$(BuildPlatform)\$(BuildConfiguration)'
+  RELEASE_SEMANTICS: '$(ReleaseSemantics)'
+  SourcesRoot: '$(RootDir)'
+
 jobs:
   - job: Main
     displayName: Main Build
@@ -130,3 +139,73 @@ jobs:
       inputs:
         testAssemblyVer2: '**\bin\**\E2ETest\**\Microsoft.Test.E2E.AspNet.OData.dll'
         testFiltercriteria: '(DisplayName!=Microsoft.Test.E2E.AspNet.OData.ODataPathHandler.UnicodeRouteTests_Todoü.CRUDEntitySetShouldWork)'
+
+    - task: DotNetCoreCLI@2
+      displayName: Packing ASP.NET Core OData
+      inputs:
+        command: custom
+        custom: pack
+        arguments: >
+          $(rootDir)\src\Microsoft.AspNetCore.OData\Microsoft.AspNetCore.OData.csproj
+          /p:NuspecFile=$(rootDir)\src\Microsoft.AspNetCore.OData\Microsoft.AspNetCore.OData.$(RELEASE_SEMANTICS).nuspec
+          --configuration=$(buildConfiguration) 
+          --output=$(Build.ArtifactStagingDirectory)\Packages 
+          -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+
+    - task: DotNetCoreCLI@2
+      displayName: Packing ASP.NET OData
+      inputs:
+        command: custom
+        custom: pack
+        arguments: >
+          $(rootDir)\src\Microsoft.AspNet.OData\Microsoft.AspNet.OData.csproj
+          /p:NuspecFile=$(rootDir)\src\Microsoft.AspNet.OData\Microsoft.AspNet.OData.$(RELEASE_SEMANTICS).nuspec
+          --configuration=$(buildConfiguration) 
+          --output=$(Build.ArtifactStagingDirectory)\Packages 
+          -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+
+    - publish: $(Build.ArtifactStagingDirectory)\Packages
+      displayName: Publish Build Artifacts  
+      artifact: BuildPackages
+
+    - publish: configs
+      displayName: Publish Signing Scripts
+      artifact: configs
+
+- stage: CodeSign
+  condition: and(succeeded('Build'), not(eq(variables['build.reason'], 'PullRequest')))
+  jobs:
+  - deployment: CodeSign
+    displayName: Code Signing
+    pool:
+      vmImage: windows-latest    
+    environment: Code Sign - Approvals
+    variables:
+    - group: Code Signing
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: custom
+              custom: tool
+              arguments: install --tool-path . SignClient
+            displayName: Install SignTool tool
+
+          - pwsh: |
+              .\SignClient "Sign" `
+              --baseDirectory "$(Pipeline.Workspace)\BuildPackages" `
+              --input "**/*.nupkg" `
+              --config "$(Pipeline.Workspace)\configs\SignClient.json" `
+              --filelist "$(Pipeline.Workspace)\configs\filelist.txt" `
+              --user "$(SignClientUser)" `
+              --secret "$(SignClientSecret)" `
+              --name "Code Sign packages" `
+              --description "Signing packages" `
+              --descriptionUrl "https://github.com/OData/AspNetCoreOData"
+            displayName: Sign packages
+              
+          - publish: $(Pipeline.Workspace)/BuildPackages
+            displayName: Publish Signed Packages
+            artifact: SignedPackages

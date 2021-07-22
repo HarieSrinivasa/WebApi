@@ -207,4 +207,11 @@
   <Import Project="..\..\sln\packages\Microsoft.Build.Tasks.Git.1.0.0\build\Microsoft.Build.Tasks.Git.targets" Condition="Exists('..\..\sln\packages\Microsoft.Build.Tasks.Git.1.0.0\build\Microsoft.Build.Tasks.Git.targets')" />
   <Import Project="..\..\sln\packages\Microsoft.SourceLink.Common.1.0.0\build\Microsoft.SourceLink.Common.targets" Condition="Exists('..\..\sln\packages\Microsoft.SourceLink.Common.1.0.0\build\Microsoft.SourceLink.Common.targets')" />
   <Import Project="..\..\sln\packages\Microsoft.SourceLink.GitHub.1.0.0\build\Microsoft.SourceLink.GitHub.targets" Condition="Exists('..\..\sln\packages\Microsoft.SourceLink.GitHub.1.0.0\build\Microsoft.SourceLink.GitHub.targets')" />
+  <Target Name="SetNuspecProperties" BeforeTargets="GenerateNuspec">
+    <PropertyGroup>
+      <NuspecProperties>ProductRoot=$(ProductBinPath);VersionNuGetSemantic=$(VersionNuGetSemantic)</NuspecProperties>
+      <NuspecProperties>$(NuspecProperties);NightlyBuildVersion=$(NightlyBuildVersion)</NuspecProperties>
+      <NuspecProperties>$(NuspecProperties);SourcesRoot=$(RootDir)</NuspecProperties>
+    </PropertyGroup>
+  </Target>
 </Project>
